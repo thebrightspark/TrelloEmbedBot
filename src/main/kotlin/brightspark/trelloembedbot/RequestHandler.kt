@@ -55,5 +55,5 @@ class RequestHandler {
     }
 
     fun getCardInfo(cardId: String) : JsonNode? =
-            get("https://api.trello.com/1/cards/$cardId?key=$trelloKey&token=$trelloToken&fields=closed,dateLastActivity,desc,due,dueComplete,name,labels&members=true&member_fields=username&checklists=all&checklist_fields=name,pos&board=true&board_fields=name&list=true&list_fields=name&label_fields=name,color")
+            get("https://api.trello.com/1/cards/$cardId?key=$trelloKey&token=$trelloToken&fields=closed,desc,due,dueComplete,name,labels&members=true&member_fields=username&checklists=all&checklist_fields=name,pos&board=true&board_fields=name&list=true&list_fields=name&label_fields=name,color")
 }
