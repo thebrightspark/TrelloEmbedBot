@@ -33,7 +33,10 @@ class RequestHandler {
             log.warn("Waiting for ${waitTime}ms before sending next request")
             Thread.sleep(waitTime)
         }
+        log.info("HTTP Get: $request")
         val response = rest.getForEntity<String>(request)
+        log.info("Response -> Status: ${response.statusCode}")
+        log.info("Response -> Body: ${response.body}")
         val json: JsonNode
         try {
             json = jsonMapper.readTree(response.body)
@@ -52,5 +55,5 @@ class RequestHandler {
     }
 
     fun getCardInfo(cardId: String) : JsonNode? =
-            get("https://api.trello.com/1/cards/$cardId?key=$trelloKey&token=$trelloToken&fields=closed,dateLastActivity,desc,due,dueComplete,name&members=true&member_fields=username&checklists=all&checklist_fields=name,pos&board=true&board_fields=name&list=true&list_fields=name&labels=all&label_fields=name,color")
+            get("https://api.trello.com/1/cards/$cardId?key=$trelloKey&token=$trelloToken&fields=closed,dateLastActivity,desc,due,dueComplete,name,labels&members=true&member_fields=username&checklists=all&checklist_fields=name,pos&board=true&board_fields=name&list=true&list_fields=name&label_fields=name,color")
 }

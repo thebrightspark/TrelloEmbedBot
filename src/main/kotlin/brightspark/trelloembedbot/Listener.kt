@@ -1,5 +1,6 @@
 package brightspark.trelloembedbot
 
+import com.fasterxml.jackson.databind.JsonNode
 import kotlinx.coroutines.asCoroutineDispatcher
 import net.dv8tion.jda.core.EmbedBuilder
 import net.dv8tion.jda.core.OnlineStatus
@@ -48,26 +49,42 @@ class Listener : DisposableBean {
                     return@execute
                 }
                 val sb = StringBuilder()
+
                 val closed = cardInfo.get("closed").asBoolean()
                 if (closed) sb.append("**This card is closed**")
-                appendInfo(sb, "Desc", cardInfo.get("desc").textValue())
+
                 val due = cardInfo.get("due")
                 if (!due.isNull) {
                     appendInfo(sb, "Due", due.asText())
                     appendInfo(sb, "Due Completed", cardInfo.get("dueComplete").asBoolean())
                 }
-                val members = ArrayList<String>()
-                cardInfo.get("members").elements().forEach { members.add(it.get("username").asText()) }
+
+                val members = extractFromJsonArray(cardInfo.get("members")) { it.get("username").asText() }
                 if (members.isNotEmpty()) {
                     members.sort()
                     appendInfo(sb, "Members", members.joinToString())
                 }
+
                 appendInfo(sb, "List", cardInfo.get("list").get("name").asText())
+
+                val labels = extractFromJsonArray(cardInfo.get("labels")) {
+                    Pair(it.get("name").asText(), LabelColour.valueOf(it.get("color").asText().toUpperCase()))
+                }
+                var messageColour = LabelColour.NULL.colour
+                if (labels.isNotEmpty()) {
+                    messageColour = labels[0].second.colour
+                    appendInfo(sb, "Labels", labels.joinToString { it.first })
+                }
+
+                appendInfo(sb, "Desc", cardInfo.get("desc").textValue())
+
+                //TODO: Add checklists
 
                 val embedBuilder = EmbedBuilder()
                         .setTitle(cardInfo.get("name").asText())
                         .setDescription(sb.toString())
                         .setFooter(cardInfo.get("board").get("name").asText(), null)
+                        .setColor(messageColour)
                 event.textChannel.sendMessage(embedBuilder.build()).queue()
             }
         }
@@ -75,5 +92,11 @@ class Listener : DisposableBean {
 
     private fun appendInfo(builder: StringBuilder, name: String, value: Any) {
         builder.append("**").append(name).append(":** ").append(value).append("\n")
+    }
+
+    private fun <T> extractFromJsonArray(array: JsonNode, mapper: (JsonNode) -> T) : ArrayList<T> {
+        val list = ArrayList<T>()
+        array.elements().forEach { list.add(mapper.invoke(it)) }
+        return list
     }
 }
