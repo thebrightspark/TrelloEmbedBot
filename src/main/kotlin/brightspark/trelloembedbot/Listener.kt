@@ -12,6 +12,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.DisposableBean
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Component
+import java.text.SimpleDateFormat
+import java.time.Instant
 import java.util.concurrent.Executors
 import java.util.regex.Pattern
 
@@ -19,6 +21,7 @@ import java.util.regex.Pattern
 class Listener : DisposableBean {
     companion object {
         val urlPattern: Pattern = Pattern.compile("(https?://)?trello.com/c/(\\w+)", Pattern.CASE_INSENSITIVE)
+        val dueDateFormat = SimpleDateFormat("d MMM 'at' HH:mm z")
     }
 
     @Autowired
@@ -55,8 +58,16 @@ class Listener : DisposableBean {
 
                 val due = cardInfo.get("due")
                 if (!due.isNull) {
-                    appendInfo(sb, "Due", due.asText())
-                    appendInfo(sb, "Due Completed", cardInfo.get("dueComplete").asBoolean())
+                    val dueDate = Instant.parse(due.asText())
+                    val curDate = Instant.now()
+                    val dueEmoji =
+                        when {
+                            cardInfo.get("dueComplete").asBoolean() -> " ✅"
+                            dueDate.isBefore(curDate) -> " ❌"
+                            else -> ""
+                        }
+
+                    appendInfo(sb, "Due", dueDateFormat.format(dueDate.toEpochMilli()) + dueEmoji)
                 }
 
                 val members = extractFromJsonArray(cardInfo.get("members")) { it.get("username").asText() }
@@ -76,15 +87,36 @@ class Listener : DisposableBean {
                     appendInfo(sb, "Labels", labels.joinToString { it.first })
                 }
 
-                appendInfo(sb, "Desc", cardInfo.get("desc").textValue())
+                var desc = cardInfo.get("desc").textValue()
+                if (desc.isBlank())
+                    desc = "Empty"
+                appendInfo(sb, "Desc", desc)
 
-                //TODO: Add checklists
+                val checklists = extractFromJsonArray(cardInfo.get("checklists")) { list ->
+                    val items = extractFromJsonArray(list.get("checkItems")) {
+                        Triple(it.get("name").asText(),
+                            it.get("state").asText().equals("complete", true),
+                            it.get("pos").asInt())
+                    }
+                    items.sortBy { it.third }
+                    return@extractFromJsonArray Triple(list.get("name").asText(), list.get("pos").asInt(), items)
+                }
 
                 val embedBuilder = EmbedBuilder()
                         .setTitle(cardInfo.get("name").asText())
                         .setDescription(sb.toString())
                         .setFooter(cardInfo.get("board").get("name").asText(), null)
                         .setColor(messageColour)
+
+                if (checklists.isNotEmpty()) {
+                    checklists.sortBy { it.second }
+                    checklists.forEach { list ->
+                        val listSb = StringBuilder()
+                        list.third.forEach { listSb.append(if (it.second) "☑️" else "\uD83D\uDD18").append(" ").append(it.first).append("\n") }
+                        embedBuilder.addField(list.first, listSb.toString(), true)
+                    }
+                }
+
                 event.textChannel.sendMessage(embedBuilder.build()).queue()
             }
         }
