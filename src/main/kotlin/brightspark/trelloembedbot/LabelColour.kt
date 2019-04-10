@@ -11,5 +11,9 @@ enum class LabelColour(val colour: Int) {
     SKY(0x00C2E0),
     PINK(0xFF78CB),
     LIME(0x51E898),
-    NULL(0xB3BEC4)
+    NULL(0xB3BEC4);
+
+    companion object {
+        fun fromString(type: String) : LabelColour? = values().firstOrNull { it.name.equals(type, true) }
+    }
 }

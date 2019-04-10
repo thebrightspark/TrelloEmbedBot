@@ -5,6 +5,7 @@ import kotlinx.coroutines.asCoroutineDispatcher
 import net.dv8tion.jda.core.EmbedBuilder
 import net.dv8tion.jda.core.OnlineStatus
 import net.dv8tion.jda.core.entities.Game
+import net.dv8tion.jda.core.entities.MessageEmbed
 import net.dv8tion.jda.core.events.ReadyEvent
 import net.dv8tion.jda.core.events.message.MessageReceivedEvent
 import net.dv8tion.jda.core.hooks.SubscribeEvent
@@ -20,7 +21,7 @@ import java.util.regex.Pattern
 @Component
 class Listener : DisposableBean {
     companion object {
-        val urlPattern: Pattern = Pattern.compile("(https?://)?trello.com/c/(\\w+)", Pattern.CASE_INSENSITIVE)
+        val urlPattern: Pattern = Pattern.compile("(https?://)?trello.com/(\\w)/(\\w+)", Pattern.CASE_INSENSITIVE)
         val dueDateFormat = SimpleDateFormat("d MMM 'at' HH:mm z")
     }
 
@@ -40,86 +41,123 @@ class Listener : DisposableBean {
 
     @SubscribeEvent
     fun onMessage(event: MessageReceivedEvent) {
+        val channel = event.textChannel
         val message = event.message
         val content = message.contentRaw
         val matcher = urlPattern.matcher(content)
         while (matcher.find()) {
-            val cardId = matcher.group(2)
-            pool.executor.execute {
-                val cardInfo = requestHandler.getCardInfo(cardId)
-                if (cardInfo == null) {
-                    print("Couldn't get info for card $cardId")
-                    return@execute
-                }
-                val sb = StringBuilder()
-
-                val closed = cardInfo.get("closed").asBoolean()
-                if (closed) sb.append("**This card is closed**")
-
-                val due = cardInfo.get("due")
-                if (!due.isNull) {
-                    val dueDate = Instant.parse(due.asText())
-                    val curDate = Instant.now()
-                    val dueEmoji =
-                        when {
-                            cardInfo.get("dueComplete").asBoolean() -> " ✅"
-                            dueDate.isBefore(curDate) -> " ❌"
-                            else -> ""
-                        }
-
-                    appendInfo(sb, "Due", dueDateFormat.format(dueDate.toEpochMilli()) + dueEmoji)
-                }
-
-                val members = extractFromJsonArray(cardInfo.get("members")) { it.get("username").asText() }
-                if (members.isNotEmpty()) {
-                    members.sort()
-                    appendInfo(sb, "Members", members.joinToString())
-                }
-
-                appendInfo(sb, "List", cardInfo.get("list").get("name").asText())
-
-                val labels = extractFromJsonArray(cardInfo.get("labels")) {
-                    Pair(it.get("name").asText(), LabelColour.valueOf(it.get("color").asText().toUpperCase()))
-                }
-                var messageColour = LabelColour.NULL.colour
-                if (labels.isNotEmpty()) {
-                    messageColour = labels[0].second.colour
-                    appendInfo(sb, "Labels", labels.joinToString { it.first })
-                }
-
-                var desc = cardInfo.get("desc").textValue()
-                if (desc.isBlank())
-                    desc = "Empty"
-                appendInfo(sb, "Desc", desc)
-
-                val checklists = extractFromJsonArray(cardInfo.get("checklists")) { list ->
-                    val items = extractFromJsonArray(list.get("checkItems")) {
-                        Triple(it.get("name").asText(),
-                            it.get("state").asText().equals("complete", true),
-                            it.get("pos").asInt())
-                    }
-                    items.sortBy { it.third }
-                    return@extractFromJsonArray Triple(list.get("name").asText(), list.get("pos").asInt(), items)
-                }
-
-                val embedBuilder = EmbedBuilder()
-                        .setTitle(cardInfo.get("name").asText())
-                        .setDescription(sb.toString())
-                        .setFooter(cardInfo.get("board").get("name").asText(), null)
-                        .setColor(messageColour)
-
-                if (checklists.isNotEmpty()) {
-                    checklists.sortBy { it.second }
-                    checklists.forEach { list ->
-                        val listSb = StringBuilder()
-                        list.third.forEach { listSb.append(if (it.second) "☑️" else "\uD83D\uDD18").append(" ").append(it.first).append("\n") }
-                        embedBuilder.addField(list.first, listSb.toString(), true)
+            val type = UrlType.fromString(matcher.group(2))
+            val id = matcher.group(3)
+            // Create a function to handle the ID depending on the type
+            val func: ((String) -> MessageEmbed?)? = when (type) {
+                UrlType.B -> { boardId: String -> handleBoard(boardId) }
+                UrlType.C -> { cardId: String -> handleCard(cardId) }
+                else -> null
+            }
+            // Run the function in a coroutine
+            func?.let { handler ->
+                pool.executor.execute {
+                    handler.invoke(id)?.let {
+                        channel.sendMessage(it).queue()
                     }
                 }
-
-                event.textChannel.sendMessage(embedBuilder.build()).queue()
             }
         }
+    }
+
+    private fun handleBoard(boardId: String) : MessageEmbed? {
+        // TODO: Handle boards
+        return null
+    }
+
+    private fun handleCard(cardId: String) : MessageEmbed? {
+        // Get card details from Trello API
+        val cardInfo = requestHandler.getCardInfo(cardId)
+        if (cardInfo == null) {
+            print("Couldn't get info for card $cardId")
+            return null
+        }
+        val sb = StringBuilder()
+
+        // Closed
+        if (cardInfo.get("closed").asBoolean())
+            sb.append("**This card is closed**")
+
+        // Due date
+        val due = cardInfo.get("due")
+        if (!due.isNull) {
+            val dueDate = Instant.parse(due.asText())
+            val curDate = Instant.now()
+            val dueEmoji =
+                    when {
+                        cardInfo.get("dueComplete").asBoolean() -> " ✅"
+                        dueDate.isBefore(curDate) -> " ❌"
+                        else -> ""
+                    }
+
+            appendInfo(sb, "Due", dueDateFormat.format(dueDate.toEpochMilli()) + dueEmoji)
+        }
+
+        // Members
+        val members = extractFromJsonArray(cardInfo.get("members")) { it.get("username").asText() }
+        if (members.isNotEmpty()) {
+            members.sort()
+            appendInfo(sb, "Members", members.joinToString())
+        }
+
+        // List
+        appendInfo(sb, "List", cardInfo.get("list").get("name").asText())
+
+        // Labels
+        val labels = extractFromJsonArray(cardInfo.get("labels")) {
+            val labelColour = it.get("color").asText()
+            var colour = LabelColour.fromString(labelColour)
+            if (colour == null) {
+                log.warn("Unknown colour '$labelColour', using colour NULL instead")
+                colour = LabelColour.NULL
+            }
+            Pair(it.get("name").asText(), colour)
+        }
+        var messageColour = LabelColour.NULL.colour
+        if (labels.isNotEmpty()) {
+            messageColour = labels[0].second.colour
+            appendInfo(sb, "Labels", labels.joinToString { it.first })
+        }
+
+        // Description
+        var desc = cardInfo.get("desc").textValue()
+        if (desc.isBlank())
+            desc = "Empty"
+        appendInfo(sb, "Desc", desc)
+
+        // Checklists (Added as fields further down)
+        val checklists = extractFromJsonArray(cardInfo.get("checklists")) { list ->
+            val items = extractFromJsonArray(list.get("checkItems")) {
+                Triple(it.get("name").asText(),
+                        it.get("state").asText().equals("complete", true),
+                        it.get("pos").asInt())
+            }
+            items.sortBy { it.third }
+            return@extractFromJsonArray Triple(list.get("name").asText(), list.get("pos").asInt(), items)
+        }
+
+        // Create embed message
+        val embedBuilder = EmbedBuilder()
+                .setTitle(cardInfo.get("name").asText())
+                .setDescription(sb.toString())
+                .setFooter(cardInfo.get("board").get("name").asText(), null)
+                .setColor(messageColour)
+
+        if (checklists.isNotEmpty()) {
+            checklists.sortBy { it.second }
+            checklists.forEach { list ->
+                val listSb = StringBuilder()
+                list.third.forEach { listSb.append(if (it.second) "☑️" else "\uD83D\uDD18").append(" ").append(it.first).append("\n") }
+                embedBuilder.addField(list.first, listSb.toString(), true)
+            }
+        }
+
+        return embedBuilder.build()
     }
 
     private fun appendInfo(builder: StringBuilder, name: String, value: Any) {
