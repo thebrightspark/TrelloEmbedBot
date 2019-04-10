@@ -1,4 +1,4 @@
-package brightspark.trelloembedbot
+package brightspark.trelloembedbot.listener
 
 import com.fasterxml.jackson.databind.JsonNode
 import kotlinx.coroutines.asCoroutineDispatcher

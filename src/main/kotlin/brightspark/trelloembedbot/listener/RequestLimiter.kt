@@ -1,4 +1,4 @@
-package brightspark.trelloembedbot
+package brightspark.trelloembedbot.listener
 
 import com.google.common.cache.CacheBuilder
 import org.springframework.beans.factory.annotation.Value

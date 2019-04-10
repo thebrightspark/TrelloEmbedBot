@@ -1,5 +1,6 @@
 package brightspark.trelloembedbot
 
+import brightspark.trelloembedbot.listener.Listener
 import net.dv8tion.jda.core.AccountType
 import net.dv8tion.jda.core.JDABuilder
 import net.dv8tion.jda.core.OnlineStatus

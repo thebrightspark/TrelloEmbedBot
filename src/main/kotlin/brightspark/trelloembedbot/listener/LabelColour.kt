@@ -1,4 +1,4 @@
-package brightspark.trelloembedbot
+package brightspark.trelloembedbot.listener
 
 enum class LabelColour(val colour: Int) {
     YELLOW(0xF2D600),
