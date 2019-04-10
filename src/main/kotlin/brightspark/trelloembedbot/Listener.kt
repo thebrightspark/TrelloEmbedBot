@@ -21,7 +21,7 @@ import java.util.regex.Pattern
 @Component
 class Listener : DisposableBean {
     companion object {
-        val urlPattern: Pattern = Pattern.compile("(https?://)?trello.com/(\\w)/(\\w+)", Pattern.CASE_INSENSITIVE)
+        val urlPattern: Pattern = Pattern.compile("(https?://)?trello.com/(invite/)?(?<type>\\w)/(?<id>\\w+)", Pattern.CASE_INSENSITIVE)
         val dueDateFormat = SimpleDateFormat("d MMM 'at' HH:mm z")
     }
 
@@ -48,8 +48,8 @@ class Listener : DisposableBean {
         //TODO: Make this more efficient by batching multiple requests together from a single Discord message
         // https://developers.trello.com/reference/#batch
         while (matcher.find()) {
-            val type = matcher.group(2)
-            val id = matcher.group(3)
+            val type = matcher.group("type")
+            val id = matcher.group("id")
             // Create a function to handle the ID depending on the type
             val func: ((String) -> MessageEmbed?)? = when (type) {
                 "b" -> { boardId: String -> handleBoard(boardId) }
@@ -68,22 +68,41 @@ class Listener : DisposableBean {
     }
 
     private fun handleBoard(boardId: String) : MessageEmbed? {
-        // TODO: Handle boards
-        return null
+        val boardInfo = requestHandler.getBoardInfo(boardId)
+        if (boardInfo == null) {
+            log.info("Couldn't get info for board $boardId")
+            return null
+        }
+        val sb = StringBuilder()
+
+        if (boardInfo.get("closed").asBoolean())
+            sb.append("**This board is closed**\n\n")
+        var desc = boardInfo.get("desc").asText()
+        if (desc.isBlank())
+            desc = "Description empty"
+        sb.append(desc)
+
+        val colour = boardInfo.get("prefs").get("backgroundBottomColor").asText().substring(1).toInt(16)
+
+        return EmbedBuilder()
+            .setTitle(boardInfo.get("name").asText())
+            .setDescription(sb.toString())
+            .setColor(colour)
+            .build()
     }
 
     private fun handleCard(cardId: String) : MessageEmbed? {
         // Get card details from Trello API
         val cardInfo = requestHandler.getCardInfo(cardId)
         if (cardInfo == null) {
-            print("Couldn't get info for card $cardId")
+            log.info("Couldn't get info for card $cardId")
             return null
         }
         val sb = StringBuilder()
 
         // Closed
         if (cardInfo.get("closed").asBoolean())
-            sb.append("**This card is closed**")
+            sb.append("**This card is closed**\n")
 
         // Due date
         val due = cardInfo.get("due")
