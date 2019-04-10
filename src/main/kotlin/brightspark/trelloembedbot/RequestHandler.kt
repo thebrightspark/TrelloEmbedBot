@@ -26,10 +26,19 @@ class RequestHandler : InitializingBean {
     private lateinit var urlBuilder: TrelloApiUrlBuilder
 
     private val log = LoggerFactory.getLogger(this::class.java)
-    private val urlBoards = urlBuilder.create("boards")
+    private lateinit var urlBoards: TrelloApiUrl
+    private lateinit var urlCards: TrelloApiUrl
+
+    override fun afterPropertiesSet() {
+        // Don't want the error handler to do anything - will handle it later with the rest of the response handling
+        rest.errorHandler = object : ResponseErrorHandler {
+            override fun hasError(response: ClientHttpResponse): Boolean = false
+            override fun handleError(response: ClientHttpResponse) = Unit
+        }
+        urlBoards = urlBuilder.create("boards")
             .addParam("fields", "name,desc,closed,prefs")
             .build()
-    private val urlCards = urlBuilder.create("cards")
+        urlCards = urlBuilder.create("cards")
             .addParam("fields", "closed,desc,due,dueComplete,name,labels")
             .addParam("members", "true")
             .addParam("member_fields", "username")
@@ -41,13 +50,6 @@ class RequestHandler : InitializingBean {
             .addParam("list_fields", "name")
             .addParam("label_fields", "name,color")
             .build()
-
-    override fun afterPropertiesSet() {
-        // Don't want the error handler to do anything - will handle it later with the rest of the response handling
-        rest.errorHandler = object : ResponseErrorHandler {
-            override fun hasError(response: ClientHttpResponse): Boolean = false
-            override fun handleError(response: ClientHttpResponse) = Unit
-        }
     }
 
     private fun get(request: String) : JsonNode? {
