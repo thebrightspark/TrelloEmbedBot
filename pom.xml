@@ -10,7 +10,7 @@
 	</parent>
 	<groupId>brightspark</groupId>
 	<artifactId>trelloembedbot</artifactId>
-	<version>1.0</version>
+	<version>1.1</version>
 	<name>TrelloEmbedBot</name>
 	<description>Discord bot which posts embed with Trello card details when one is posted in a channel</description>
 
