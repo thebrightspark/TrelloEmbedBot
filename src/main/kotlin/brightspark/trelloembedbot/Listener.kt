@@ -45,13 +45,15 @@ class Listener : DisposableBean {
         val message = event.message
         val content = message.contentRaw
         val matcher = urlPattern.matcher(content)
+        //TODO: Make this more efficient by batching multiple requests together from a single Discord message
+        // https://developers.trello.com/reference/#batch
         while (matcher.find()) {
-            val type = UrlType.fromString(matcher.group(2))
+            val type = matcher.group(2)
             val id = matcher.group(3)
             // Create a function to handle the ID depending on the type
             val func: ((String) -> MessageEmbed?)? = when (type) {
-                UrlType.B -> { boardId: String -> handleBoard(boardId) }
-                UrlType.C -> { cardId: String -> handleCard(cardId) }
+                "b" -> { boardId: String -> handleBoard(boardId) }
+                "c" -> { cardId: String -> handleCard(cardId) }
                 else -> null
             }
             // Run the function in a coroutine

@@ -5,7 +5,6 @@ import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.InitializingBean
 import org.springframework.beans.factory.annotation.Autowired
-import org.springframework.beans.factory.annotation.Value
 import org.springframework.http.client.ClientHttpResponse
 import org.springframework.stereotype.Component
 import org.springframework.web.client.ResponseErrorHandler
@@ -16,18 +15,32 @@ import java.io.IOException
 @Component
 class RequestHandler : InitializingBean {
     companion object {
-        const val trelloKey: String = "10a61e7cd59f0840e292b285a9b21dab"
         val rest: RestTemplate = RestTemplate()
         val jsonMapper: ObjectMapper = ObjectMapper()
     }
 
-    @Value("\${trelloToken}")
-    private lateinit var trelloToken: String
-
     @Autowired
     private lateinit var requestLimiter: RequestLimiter
 
+    @Autowired
+    private lateinit var urlBuilder: TrelloApiUrlBuilder
+
     private val log = LoggerFactory.getLogger(this::class.java)
+    private val urlBoards = urlBuilder.create("boards")
+            .addParam("fields", "name,desc,closed,prefs")
+            .build()
+    private val urlCards = urlBuilder.create("cards")
+            .addParam("fields", "closed,desc,due,dueComplete,name,labels")
+            .addParam("members", "true")
+            .addParam("member_fields", "username")
+            .addParam("checklists", "all")
+            .addParam("checklist_fields", "name,pos")
+            .addParam("board", "true")
+            .addParam("board_fields", "name")
+            .addParam("list", "true")
+            .addParam("list_fields", "name")
+            .addParam("label_fields", "name,color")
+            .build()
 
     override fun afterPropertiesSet() {
         // Don't want the error handler to do anything - will handle it later with the rest of the response handling
@@ -60,8 +73,13 @@ class RequestHandler : InitializingBean {
         return json
     }
 
+    fun getBoardInfo(boardId: String) : JsonNode? {
+        log.info("Getting info for board ID '$boardId' from Trello")
+        return get(urlBoards.create(boardId))
+    }
+
     fun getCardInfo(cardId: String) : JsonNode? {
         log.info("Getting info for card ID '$cardId' from Trello")
-        return get("https://api.trello.com/1/cards/$cardId?key=$trelloKey&token=$trelloToken&fields=closed,desc,due,dueComplete,name,labels&members=true&member_fields=username&checklists=all&checklist_fields=name,pos&board=true&board_fields=name&list=true&list_fields=name&label_fields=name,color")
+        return get(urlCards.create(cardId))
     }
 }
