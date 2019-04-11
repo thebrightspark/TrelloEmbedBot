@@ -1,6 +1,7 @@
 package brightspark.trelloembedbot
 
 import brightspark.trelloembedbot.listener.Listener
+import brightspark.trelloembedbot.tokens.CommandToken
 import net.dv8tion.jda.core.AccountType
 import net.dv8tion.jda.core.JDABuilder
 import net.dv8tion.jda.core.OnlineStatus
@@ -25,6 +26,9 @@ class Application {
 	@Autowired
 	private lateinit var listener: Listener
 
+	@Autowired
+	private lateinit var commandToken: CommandToken
+
 	@Bean
 	fun init() {
 		val builder = JDABuilder(AccountType.BOT)
@@ -32,7 +36,7 @@ class Application {
 			.setStatus(OnlineStatus.DO_NOT_DISTURB)
 			.setGame(Game.playing("Starting up..."))
 			.setEventManager(AnnotatedEventManager())
-			.addEventListener(listener)
+			.addEventListener(listener, commandToken)
 		try {
 			builder.build()
 		}

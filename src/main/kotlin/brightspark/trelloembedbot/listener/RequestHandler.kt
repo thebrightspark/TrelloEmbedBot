@@ -1,5 +1,6 @@
 package brightspark.trelloembedbot.listener
 
+import brightspark.trelloembedbot.tokens.TrelloTokenHandler
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
 import org.slf4j.LoggerFactory
@@ -24,6 +25,9 @@ class RequestHandler : InitializingBean {
 
     @Autowired
     private lateinit var urlBuilder: TrelloApiUrlBuilder
+
+    @Autowired
+    private lateinit var tokenHandler: TrelloTokenHandler
 
     private val log = LoggerFactory.getLogger(this::class.java)
     private lateinit var urlBoards: TrelloApiUrl
@@ -75,13 +79,13 @@ class RequestHandler : InitializingBean {
         return json
     }
 
-    fun getBoardInfo(boardId: String) : JsonNode? {
+    fun getBoardInfo(boardId: String, guildId: Long) : JsonNode? {
         log.info("Getting info for board ID '$boardId' from Trello")
-        return get(urlBoards.create(boardId))
+        return get(urlBoards.create(boardId, tokenHandler.getToken(guildId)))
     }
 
-    fun getCardInfo(cardId: String) : JsonNode? {
+    fun getCardInfo(cardId: String, guildId: Long) : JsonNode? {
         log.info("Getting info for card ID '$cardId' from Trello")
-        return get(urlCards.create(cardId))
+        return get(urlCards.create(cardId, tokenHandler.getToken(guildId)))
     }
 }

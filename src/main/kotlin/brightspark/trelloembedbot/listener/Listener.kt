@@ -41,6 +41,7 @@ class Listener : DisposableBean {
 
     @SubscribeEvent
     fun onMessage(event: MessageReceivedEvent) {
+        val guildId = event.guild.idLong
         val channel = event.textChannel
         val message = event.message
         val content = message.contentRaw
@@ -52,8 +53,8 @@ class Listener : DisposableBean {
             val id = matcher.group("id")
             // Create a function to handle the ID depending on the type
             val func: ((String) -> MessageEmbed?)? = when (type) {
-                "b" -> { boardId: String -> handleBoard(boardId) }
-                "c" -> { cardId: String -> handleCard(cardId) }
+                "b" -> { boardId: String -> handleBoard(boardId, guildId) }
+                "c" -> { cardId: String -> handleCard(cardId, guildId) }
                 else -> null
             }
             // Run the function in a coroutine
@@ -67,8 +68,8 @@ class Listener : DisposableBean {
         }
     }
 
-    private fun handleBoard(boardId: String) : MessageEmbed? {
-        val boardInfo = requestHandler.getBoardInfo(boardId)
+    private fun handleBoard(boardId: String, guildId: Long) : MessageEmbed? {
+        val boardInfo = requestHandler.getBoardInfo(boardId, guildId)
         if (boardInfo == null) {
             log.info("Couldn't get info for board $boardId")
             return null
@@ -91,9 +92,9 @@ class Listener : DisposableBean {
             .build()
     }
 
-    private fun handleCard(cardId: String) : MessageEmbed? {
+    private fun handleCard(cardId: String, guildId: Long) : MessageEmbed? {
         // Get card details from Trello API
-        val cardInfo = requestHandler.getCardInfo(cardId)
+        val cardInfo = requestHandler.getCardInfo(cardId, guildId)
         if (cardInfo == null) {
             log.info("Couldn't get info for card $cardId")
             return null
