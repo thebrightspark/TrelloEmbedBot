@@ -19,6 +19,15 @@ class CommandToken {
 
     @SubscribeEvent
     fun onMessage(event: MessageReceivedEvent) {
+        //TODO: Change this to only be used in private channels
+        /*
+        Probably will need a separate command to initiate/authorise the DM and use of this command for a guild?
+        e.g.
+        (following command can only be used in guilds by members with admin perms)
+        t! token
+        (bot opens DM with user and allows them to use this command to change the token for the guild)
+        t! set <token>
+         */
         if (!event.member.isOwner)
             return
         val channel = event.textChannel
@@ -39,16 +48,17 @@ class CommandToken {
                             return
                         }
                         val token = parts[2]
-                        tokenHandler.putToken(guildId, token)
+                        tokenHandler.setToken(guildId, token, event.author.idLong)
                         channel.sendMessage(createMessage("Set token for this server to $token"))
                     }
                     "get" -> {
-                        val token = tokenHandler.getToken(guildId)
-                        channel.sendMessage(createMessage(
-                            if (token.isBlank())
-                                "There is no Trello token set for this server"
-                            else
-                                "Trello token for this server is currently: $token"))
+                        val pair = tokenHandler.getToken(guildId)
+                        if (pair == null)
+                            channel.sendMessage(createMessage("There is no Trello token set for this server"))
+                        else {
+                            val owner = event.jda.getUserById(pair.second)
+                            channel.sendMessage(createMessage("Trello token: ${pair.first}\nAdded by: ${if (owner != null) owner.name else "Unknown"}"))
+                        }
                     }
                     "del" -> {
                         tokenHandler.removeToken(guildId)

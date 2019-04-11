@@ -16,7 +16,7 @@ class TrelloTokenHandler : InitializingBean {
     private var dbConnection: Connection? = null
 
     override fun afterPropertiesSet() =
-        execute("create table if not exists tokens (guild_id integer primary key, trello_token text not null)")
+        execute("create table if not exists tokens (guild_id integer primary key not null, trello_token text, token_owner integer, notified integer default 0 not null)")
 
     private fun getConnection() : Connection {
         try {
@@ -50,12 +50,22 @@ class TrelloTokenHandler : InitializingBean {
         }
     }
 
-    fun getToken(guildId: Long) : String =
-        executeWithResult("select trello_token from tokens where guild_id = $guildId") { it.getString("trello_token") }
-            ?: ""
+    fun getToken(guildId: Long): Pair<String, Long>? =
+            executeWithResult("select trello_token from tokens where guild_id = $guildId") {
+                val token = it.getString("trello_token")
+                val owner = it.getLong("token_owner")
+                if (token != null && owner > 0) Pair(token, owner) else null
+            }
 
-    fun putToken(guildId: Long, trelloToken: String) =
-        execute("replace into tokens (guild_id,trello_token) values ($guildId,$trelloToken)")
+    fun setToken(guildId: Long, trelloToken: String, userId: Long) =
+            execute("replace into tokens (guild_id,trello_token,token_owner) values ($guildId,$trelloToken,$userId)")
 
     fun removeToken(guildId: Long) = execute("delete from tokens where guild_id = $guildId")
+
+    fun getTokenAndNotified(guildId: Long): Pair<String, Boolean> =
+            executeWithResult("select trello_token, notified from tokens where guild_id = $guildId") {
+                Pair(it.getString("trello_token"), it.getBoolean("notified"))
+            } ?: Pair("", false)
+
+    fun setNotified(guildId: Long) = execute("replace into tokens (guild_id,notified) values ($guildId,true)")
 }

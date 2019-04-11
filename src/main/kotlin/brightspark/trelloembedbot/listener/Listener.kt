@@ -1,12 +1,17 @@
 package brightspark.trelloembedbot.listener
 
+import brightspark.trelloembedbot.Application
+import brightspark.trelloembedbot.tokens.TrelloTokenHandler
 import com.fasterxml.jackson.databind.JsonNode
 import kotlinx.coroutines.asCoroutineDispatcher
 import net.dv8tion.jda.core.EmbedBuilder
 import net.dv8tion.jda.core.OnlineStatus
 import net.dv8tion.jda.core.entities.Game
+import net.dv8tion.jda.core.entities.Guild
 import net.dv8tion.jda.core.entities.MessageEmbed
 import net.dv8tion.jda.core.events.ReadyEvent
+import net.dv8tion.jda.core.events.guild.GuildJoinEvent
+import net.dv8tion.jda.core.events.guild.GuildLeaveEvent
 import net.dv8tion.jda.core.events.message.MessageReceivedEvent
 import net.dv8tion.jda.core.hooks.SubscribeEvent
 import org.slf4j.LoggerFactory
@@ -28,6 +33,9 @@ class Listener : DisposableBean {
     @Autowired
     private lateinit var requestHandler: RequestHandler
 
+    @Autowired
+    private lateinit var tokenHandler: TrelloTokenHandler
+
     private val log = LoggerFactory.getLogger(this::class.java)
     private val pool = Executors.newSingleThreadExecutor().asCoroutineDispatcher()
 
@@ -40,8 +48,29 @@ class Listener : DisposableBean {
     }
 
     @SubscribeEvent
+    fun onGuildJoin(event: GuildJoinEvent) {
+        // Notify server owner if token isn't set
+        val guild = event.guild
+        log.info("Joined guild $guild")
+        val pair = tokenHandler.getTokenAndNotified(guild.idLong)
+        if (pair.first.isBlank() && !pair.second) {
+            log.warn("Guild $guild has no token set! Notifying owner...")
+            tokenHandler.setNotified(guild.idLong)
+            guild.owner.user.openPrivateChannel().queue { it.sendMessage(Application.messageNotify).queue() }
+        }
+    }
+
+    @SubscribeEvent
+    fun onGuildLeave(event: GuildLeaveEvent) {
+        // Remove the token (if any) for the guild
+        val guild = event.guild
+        log.info("Left guild $guild")
+        tokenHandler.removeToken(event.guild.idLong)
+    }
+
+    @SubscribeEvent
     fun onMessage(event: MessageReceivedEvent) {
-        val guildId = event.guild.idLong
+        val guild = event.guild
         val channel = event.textChannel
         val message = event.message
         val content = message.contentRaw
@@ -53,8 +82,8 @@ class Listener : DisposableBean {
             val id = matcher.group("id")
             // Create a function to handle the ID depending on the type
             val func: ((String) -> MessageEmbed?)? = when (type) {
-                "b" -> { boardId: String -> handleBoard(boardId, guildId) }
-                "c" -> { cardId: String -> handleCard(cardId, guildId) }
+                "b" -> { boardId: String -> handleBoard(boardId, guild) }
+                "c" -> { cardId: String -> handleCard(cardId, guild) }
                 else -> null
             }
             // Run the function in a coroutine
@@ -68,8 +97,8 @@ class Listener : DisposableBean {
         }
     }
 
-    private fun handleBoard(boardId: String, guildId: Long) : MessageEmbed? {
-        val boardInfo = requestHandler.getBoardInfo(boardId, guildId)
+    private fun handleBoard(boardId: String, guild: Guild) : MessageEmbed? {
+        val boardInfo = requestHandler.getBoardInfo(boardId, guild)
         if (boardInfo == null) {
             log.info("Couldn't get info for board $boardId")
             return null
@@ -92,9 +121,9 @@ class Listener : DisposableBean {
             .build()
     }
 
-    private fun handleCard(cardId: String, guildId: Long) : MessageEmbed? {
+    private fun handleCard(cardId: String, guild: Guild) : MessageEmbed? {
         // Get card details from Trello API
-        val cardInfo = requestHandler.getCardInfo(cardId, guildId)
+        val cardInfo = requestHandler.getCardInfo(cardId, guild)
         if (cardInfo == null) {
             log.info("Couldn't get info for card $cardId")
             return null

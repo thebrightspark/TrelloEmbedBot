@@ -1,8 +1,10 @@
 package brightspark.trelloembedbot.listener
 
+import brightspark.trelloembedbot.Application
 import brightspark.trelloembedbot.tokens.TrelloTokenHandler
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
+import net.dv8tion.jda.core.entities.Guild
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.InitializingBean
 import org.springframework.beans.factory.annotation.Autowired
@@ -39,6 +41,7 @@ class RequestHandler : InitializingBean {
             override fun hasError(response: ClientHttpResponse): Boolean = false
             override fun handleError(response: ClientHttpResponse) = Unit
         }
+
         urlBoards = urlBuilder.create("boards")
             .addParam("fields", "name,desc,closed,prefs")
             .build()
@@ -56,7 +59,7 @@ class RequestHandler : InitializingBean {
             .build()
     }
 
-    private fun get(request: String) : JsonNode? {
+    private fun get(request: String, guild: Guild) : JsonNode? {
         val waitTime = requestLimiter.acquire()
         if (waitTime > 0) {
             log.warn("Waiting for ${waitTime}ms before sending next request")
@@ -66,6 +69,7 @@ class RequestHandler : InitializingBean {
         val response = rest.getForEntity<String>(request)
         val status = response.statusCode
         val json: JsonNode
+        //TODO: Send message back to channel on failure?
         try {
             json = jsonMapper.readTree(response.body)
         } catch (e: IOException) {
@@ -79,13 +83,33 @@ class RequestHandler : InitializingBean {
         return json
     }
 
-    fun getBoardInfo(boardId: String, guildId: Long) : JsonNode? {
-        log.info("Getting info for board ID '$boardId' from Trello")
-        return get(urlBoards.create(boardId, tokenHandler.getToken(guildId)))
+    private fun getToken(guild: Guild): String? {
+        val pair = tokenHandler.getTokenAndNotified(guild.idLong)
+        val token = pair.first
+        if (token.isBlank()) {
+            log.warn("Token not set for guild ID ${guild.idLong} - not getting info")
+            if (!pair.second) {
+                tokenHandler.setNotified(guild.idLong)
+                guild.owner.user.openPrivateChannel().queue { it.sendMessage(Application.messageNotify).queue() }
+            }
+            return null
+        }
+        return token
     }
 
-    fun getCardInfo(cardId: String, guildId: Long) : JsonNode? {
-        log.info("Getting info for card ID '$cardId' from Trello")
-        return get(urlCards.create(cardId, tokenHandler.getToken(guildId)))
+    fun getBoardInfo(boardId: String, guild: Guild) : JsonNode? {
+        getToken(guild)?.let {
+            log.info("Getting info for board ID '$boardId' from Trello using token '$it'")
+            return get(urlBoards.create(boardId, it), guild)
+        }
+        return null
+    }
+
+    fun getCardInfo(cardId: String, guild: Guild) : JsonNode? {
+        getToken(guild)?.let {
+            log.info("Getting info for card ID '$cardId' from Trello using token '$it'")
+            return get(urlCards.create(cardId, it), guild)
+        }
+        return null
     }
 }
