@@ -84,7 +84,7 @@ class RequestHandler : InitializingBean {
                     else
                         "Error: ${json.get("error")}\nMessage: ${json.get("message")}"
             log.error("Error getting from URL: $request\nCode: ${status.value()}\n$errorMessage")
-            Utils.sendMessage(channel, "Request to Trello API failed:\n$errorMessage", success = false)
+            Utils.sendMessage(channel, "Request to Trello API failed\n$errorMessage", success = false)
             return null
         }
         return json
