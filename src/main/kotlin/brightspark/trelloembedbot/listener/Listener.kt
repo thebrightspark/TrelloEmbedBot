@@ -1,14 +1,12 @@
 package brightspark.trelloembedbot.listener
 
-import brightspark.trelloembedbot.Application
 import brightspark.trelloembedbot.tokens.TrelloTokenHandler
 import com.fasterxml.jackson.databind.JsonNode
 import kotlinx.coroutines.asCoroutineDispatcher
 import net.dv8tion.jda.core.EmbedBuilder
 import net.dv8tion.jda.core.OnlineStatus
 import net.dv8tion.jda.core.entities.Game
-import net.dv8tion.jda.core.entities.Guild
-import net.dv8tion.jda.core.entities.MessageEmbed
+import net.dv8tion.jda.core.entities.TextChannel
 import net.dv8tion.jda.core.events.ReadyEvent
 import net.dv8tion.jda.core.events.guild.GuildJoinEvent
 import net.dv8tion.jda.core.events.guild.GuildLeaveEvent
@@ -48,17 +46,7 @@ class Listener : DisposableBean {
     }
 
     @SubscribeEvent
-    fun onGuildJoin(event: GuildJoinEvent) {
-        // Notify server owner if token isn't set
-        val guild = event.guild
-        log.info("Joined guild $guild")
-        val pair = tokenHandler.getTokenAndNotified(guild.idLong)
-        if (pair.first.isBlank() && !pair.second) {
-            log.warn("Guild $guild has no token set! Notifying owner...")
-            tokenHandler.setNotified(guild.idLong)
-            guild.owner.user.openPrivateChannel().queue { it.sendMessage(Application.messageDm).queue() }
-        }
-    }
+    fun onGuildJoin(event: GuildJoinEvent) = log.info("Joined guild ${event.guild}")
 
     @SubscribeEvent
     fun onGuildLeave(event: GuildLeaveEvent) {
@@ -70,7 +58,9 @@ class Listener : DisposableBean {
 
     @SubscribeEvent
     fun onMessage(event: MessageReceivedEvent) {
-        val guild = event.guild
+        if (event.author.isBot)
+            return
+
         val channel = event.textChannel
         val message = event.message
         val content = message.contentRaw
@@ -81,27 +71,21 @@ class Listener : DisposableBean {
             val type = matcher.group("type")
             val id = matcher.group("id")
             // Create a function to handle the ID depending on the type
-            val func: ((String) -> MessageEmbed?)? = when (type) {
-                "b" -> { boardId: String -> handleBoard(boardId, guild) }
-                "c" -> { cardId: String -> handleCard(cardId, guild) }
+            val func: ((String) -> Unit)? = when (type) {
+                "b" -> { boardId: String -> handleBoard(boardId, channel) }
+                "c" -> { cardId: String -> handleCard(cardId, channel) }
                 else -> null
             }
             // Run the function in a coroutine
-            func?.let { handler ->
-                pool.executor.execute {
-                    handler.invoke(id)?.let {
-                        channel.sendMessage(it).queue()
-                    }
-                }
-            }
+            func?.let { handler -> pool.executor.execute { handler.invoke(id) } }
         }
     }
 
-    private fun handleBoard(boardId: String, guild: Guild) : MessageEmbed? {
-        val boardInfo = requestHandler.getBoardInfo(boardId, guild)
+    private fun handleBoard(boardId: String, channel: TextChannel) {
+        val boardInfo = requestHandler.getBoardInfo(boardId, channel)
         if (boardInfo == null) {
             log.info("Couldn't get info for board $boardId")
-            return null
+            return
         }
         val sb = StringBuilder()
 
@@ -114,19 +98,20 @@ class Listener : DisposableBean {
 
         val colour = boardInfo.get("prefs").get("backgroundBottomColor").asText().substring(1).toInt(16)
 
-        return EmbedBuilder()
-            .setTitle(boardInfo.get("name").asText())
-            .setDescription(sb.toString())
-            .setColor(colour)
-            .build()
+        channel.sendMessage(EmbedBuilder()
+                .setTitle(boardInfo.get("name").asText())
+                .setDescription(sb.toString())
+                .setColor(colour)
+                .build())
+                .queue()
     }
 
-    private fun handleCard(cardId: String, guild: Guild) : MessageEmbed? {
+    private fun handleCard(cardId: String, channel: TextChannel) {
         // Get card details from Trello API
-        val cardInfo = requestHandler.getCardInfo(cardId, guild)
+        val cardInfo = requestHandler.getCardInfo(cardId, channel)
         if (cardInfo == null) {
             log.info("Couldn't get info for card $cardId")
-            return null
+            return
         }
         val sb = StringBuilder()
 
@@ -208,7 +193,7 @@ class Listener : DisposableBean {
             }
         }
 
-        return embedBuilder.build()
+        channel.sendMessage(embedBuilder.build()).queue()
     }
 
     private fun appendInfo(builder: StringBuilder, name: String, value: Any) {

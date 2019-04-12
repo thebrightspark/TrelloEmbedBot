@@ -1,80 +1,122 @@
 package brightspark.trelloembedbot.tokens
 
-import net.dv8tion.jda.core.EmbedBuilder
-import net.dv8tion.jda.core.entities.MessageEmbed
-import net.dv8tion.jda.core.events.message.MessageReceivedEvent
+import brightspark.trelloembedbot.Utils
+import net.dv8tion.jda.core.Permission
+import net.dv8tion.jda.core.entities.Message
+import net.dv8tion.jda.core.events.message.guild.GuildMessageReceivedEvent
+import net.dv8tion.jda.core.events.message.priv.PrivateMessageReceivedEvent
 import net.dv8tion.jda.core.hooks.SubscribeEvent
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
-import java.awt.Color
+import java.util.concurrent.TimeUnit
 
 @Component
 class CommandToken {
+    companion object {
+        // This is a map of userId to guildId and start timestamp so actions by a user in DM can affect the specific guild
+        private val privateConvos = HashMap<Long, Pair<Long, Long>>()
+        private val dmTimeout = TimeUnit.MINUTES.toMillis(5)
+    }
+
     @Value("\${prefix:t!}")
     private lateinit var prefix: String
 
     @Autowired
     private lateinit var tokenHandler: TrelloTokenHandler
 
+    // Looks for "t! token" in guilds sent by the guild owner or admins
     @SubscribeEvent
-    fun onMessage(event: MessageReceivedEvent) {
-        //TODO: Change this to only be used in private channels
-        /*
-        Probably will need a separate command to initiate/authorise the DM and use of this command for a guild?
-        e.g.
-        (following command can only be used in guilds by members with admin perms)
-        t! token
-        (bot opens DM with user and allows them to use this command to change the token for the guild)
-        t! set <token>
-         */
-        if (!event.member.isOwner)
+    fun onGuildMessage(event: GuildMessageReceivedEvent) {
+        if (event.author.isBot)
             return
-        val channel = event.textChannel
-        val message = event.message.contentRaw
-        if (message.startsWith(prefix)) {
-            val parts = message.substring(prefix.length).trim().split(Regex("\\s+"), 3)
-            val numParts = parts.size
-            if (numParts < 2) {
-                channel.sendMessage(createFailMessage("Invalid command arguments"))
+
+        // Only the guild owner or admins can change the bot token
+        val member = event.member
+        if (!member.isOwner && !member.hasPermission(Permission.ADMINISTRATOR))
+            return
+        val parts = getCommandParts(event.message, true)
+        if (parts.size == 1 && parts[0].equals("token", true)) {
+            // Open a private session with the user to manage the token
+            val user = member.user
+            privateConvos[user.idLong] = Pair(event.guild.idLong, System.currentTimeMillis() + dmTimeout)
+            user.openPrivateChannel().queue { it.sendMessage(Utils.getDmMessage(event.guild)).queue() }
+        }
+    }
+
+    // Responds to DMs who have a valid session open
+    @SubscribeEvent
+    fun onPrivateMessage(event: PrivateMessageReceivedEvent) {
+        if (event.author.isBot)
+            return
+
+        val userId = event.author.idLong
+        val channel = event.channel
+        val session = privateConvos[userId]
+        if (session == null) {
+            Utils.sendMessage(channel, "You need to use `t! token` in your server before we can do anything here!")
+        } else {
+            // Validate session
+            val guildId = session.first
+            if (event.jda.getGuildById(guildId) == null) {
+                privateConvos.remove(userId)
+                Utils.sendMessage(channel, "Couldn't find server with ID $guildId!")
                 return
             }
-            if (parts[0] == "token") {
-                val guildId = event.guild.idLong
-                when (parts[1]) {
-                    "set" -> {
-                        if (numParts < 3) {
-                            channel.sendMessage(createFailMessage("Invalid command arguments"))
+            if (session.second < System.currentTimeMillis()) {
+                Utils.sendMessage(channel, "Our private message session has timed out!\nPlease use `t! token` in your guild again if you want to continue.")
+                return
+            }
+
+            // Handle command
+            val parts = getCommandParts(event.message, false)
+            val numParts = parts.size
+            if (numParts < 1)
+                return
+            when (parts[0]) {
+                "set" -> {
+                    when {
+                        numParts < 2 -> {
+                            Utils.sendMessage(channel, "No token provided!", success = false)
                             return
                         }
-                        val token = parts[2]
-                        tokenHandler.setToken(guildId, token, event.author.idLong)
-                        channel.sendMessage(createMessage("Set token for this server to $token"))
-                    }
-                    "get" -> {
-                        val pair = tokenHandler.getToken(guildId)
-                        if (pair == null)
-                            channel.sendMessage(createMessage("There is no Trello token set for this server"))
-                        else {
-                            val owner = event.jda.getUserById(pair.second)
-                            channel.sendMessage(createMessage("Trello token: ${pair.first}\nAdded by: ${if (owner != null) owner.name else "Unknown"}"))
+                        numParts > 2 -> {
+                            Utils.sendMessage(channel, "Invalid token provided!", success = false)
+                            return
                         }
                     }
-                    "del" -> {
-                        tokenHandler.removeToken(guildId)
-                        channel.sendMessage(createMessage("Trello token removed for this server"))
-                    }
-                    else -> channel.sendMessage(createFailMessage("Invalid command arguments"))
+                    val token = parts[1]
+                    tokenHandler.setToken(guildId, token, event.author.idLong)
+                    Utils.sendMessage(channel, "Set token for this server to $token")
                 }
+                "get" -> {
+                    val pair = tokenHandler.getToken(guildId)
+                    if (pair == null)
+                        Utils.sendMessage(channel, "There is no Trello token set for this server")
+                    else {
+                        val owner = event.jda.getUserById(pair.second)
+                        Utils.sendMessage(channel, "Trello token: ${pair.first}\nAdded by: ${if (owner != null) owner.name else "Unknown"}")
+                    }
+                }
+                "del" -> {
+                    tokenHandler.removeToken(guildId)
+                    Utils.sendMessage(channel, "Trello token removed for this server")
+                }
+                "end" -> {
+                    privateConvos.remove(userId)
+                    Utils.sendMessage(channel, "Session ended")
+                }
+                else -> Utils.sendMessage(channel, "Invalid command arguments", success = false)
             }
         }
     }
 
-    private fun createFailMessage(text: String): MessageEmbed = createMessage(text, false)
-
-    private fun createMessage(text: String, success: Boolean = true): MessageEmbed =
-        EmbedBuilder()
-            .setDescription(text)
-            .setColor(if (success) Color.GREEN else Color.RED)
-            .build()
+    private fun getCommandParts(message: Message, requiresPrefix: Boolean): List<String> {
+        var content = message.contentRaw
+        if (content.startsWith(prefix))
+            content = content.substring(prefix.length).trim()
+        else if (requiresPrefix)
+            return emptyList()
+        return content.split(Regex("\\s+"))
+    }
 }

@@ -51,18 +51,18 @@ class TrelloTokenHandler : InitializingBean {
     }
 
     fun getToken(guildId: Long): Pair<String, Long>? =
-            executeWithResult("select trello_token from tokens where guild_id = $guildId") {
+            executeWithResult("select trello_token, token_owner from tokens where guild_id = $guildId") {
                 val token = it.getString("trello_token")
                 val owner = it.getLong("token_owner")
                 if (token != null && owner > 0) Pair(token, owner) else null
             }
 
     fun setToken(guildId: Long, trelloToken: String, userId: Long) =
-            execute("replace into tokens (guild_id,trello_token,token_owner) values ($guildId,$trelloToken,$userId)")
+            execute("replace into tokens (guild_id,trello_token,token_owner,notified) values ($guildId,'$trelloToken',$userId,false)")
 
     fun removeToken(guildId: Long) = execute("delete from tokens where guild_id = $guildId")
 
-    fun getTokenAndNotified(guildId: Long): Pair<String, Boolean> =
+    fun getTokenAndNotified(guildId: Long): Pair<String?, Boolean> =
             executeWithResult("select trello_token, notified from tokens where guild_id = $guildId") {
                 Pair(it.getString("trello_token"), it.getBoolean("notified"))
             } ?: Pair("", false)

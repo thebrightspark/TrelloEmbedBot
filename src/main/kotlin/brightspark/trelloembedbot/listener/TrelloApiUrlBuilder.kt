@@ -1,6 +1,6 @@
 package brightspark.trelloembedbot.listener
 
-import brightspark.trelloembedbot.Application
+import brightspark.trelloembedbot.Utils
 import org.springframework.stereotype.Component
 
 @Component
@@ -24,7 +24,7 @@ class TrelloApiUrlBuilder {
     }
 
     fun build() : TrelloApiUrl {
-        val sb = StringBuilder("$urlBase$api/%s?key=${Application.trelloKey}&token=%s")
+        val sb = StringBuilder("$urlBase$api/%s?key=${Utils.trelloKey}&token=%s")
         params.forEach { sb.append('&').append(it.first).append('=').append(it.second) }
         return TrelloApiUrl(sb.toString())
     }

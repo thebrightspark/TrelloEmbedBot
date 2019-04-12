@@ -1,10 +1,10 @@
 package brightspark.trelloembedbot.listener
 
-import brightspark.trelloembedbot.Application
 import brightspark.trelloembedbot.tokens.TrelloTokenHandler
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
-import net.dv8tion.jda.core.entities.Guild
+import net.dv8tion.jda.core.EmbedBuilder
+import net.dv8tion.jda.core.entities.TextChannel
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.InitializingBean
 import org.springframework.beans.factory.annotation.Autowired
@@ -13,6 +13,7 @@ import org.springframework.stereotype.Component
 import org.springframework.web.client.ResponseErrorHandler
 import org.springframework.web.client.RestTemplate
 import org.springframework.web.client.getForEntity
+import java.awt.Color
 import java.io.IOException
 
 @Component
@@ -59,7 +60,7 @@ class RequestHandler : InitializingBean {
             .build()
     }
 
-    private fun get(request: String, guild: Guild) : JsonNode? {
+    private fun get(request: String, channel: TextChannel) : JsonNode? {
         val waitTime = requestLimiter.acquire()
         if (waitTime > 0) {
             log.warn("Waiting for ${waitTime}ms before sending next request")
@@ -83,32 +84,37 @@ class RequestHandler : InitializingBean {
         return json
     }
 
-    private fun getToken(guild: Guild): String? {
+    private fun getToken(channel: TextChannel): String? {
+        val guild = channel.guild
         val pair = tokenHandler.getTokenAndNotified(guild.idLong)
         val token = pair.first
-        if (token.isBlank()) {
+        if (token == null || token.isBlank()) {
             log.warn("Token not set for guild ID ${guild.idLong} - not getting info")
             if (!pair.second) {
                 tokenHandler.setNotified(guild.idLong)
-                guild.owner.user.openPrivateChannel().queue { it.sendMessage(Application.messageDm).queue() }
+                channel.sendMessage(EmbedBuilder()
+                        .setDescription("The Trello token for this server hasn't been set!\nAn admin should use `t! token` to open a DM session with me to configure it.")
+                        .setColor(Color.RED)
+                        .build())
+                        .queue()
             }
             return null
         }
         return token
     }
 
-    fun getBoardInfo(boardId: String, guild: Guild) : JsonNode? {
-        getToken(guild)?.let {
+    fun getBoardInfo(boardId: String, channel: TextChannel) : JsonNode? {
+        getToken(channel)?.let {
             log.info("Getting info for board ID '$boardId' from Trello using token '$it'")
-            return get(urlBoards.create(boardId, it), guild)
+            return get(urlBoards.create(boardId, it), channel)
         }
         return null
     }
 
-    fun getCardInfo(cardId: String, guild: Guild) : JsonNode? {
-        getToken(guild)?.let {
+    fun getCardInfo(cardId: String, channel: TextChannel) : JsonNode? {
+        getToken(channel)?.let {
             log.info("Getting info for card ID '$cardId' from Trello using token '$it'")
-            return get(urlCards.create(cardId, it), guild)
+            return get(urlCards.create(cardId, it), channel)
         }
         return null
     }
