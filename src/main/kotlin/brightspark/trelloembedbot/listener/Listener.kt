@@ -56,7 +56,7 @@ class Listener : DisposableBean {
         if (pair.first.isBlank() && !pair.second) {
             log.warn("Guild $guild has no token set! Notifying owner...")
             tokenHandler.setNotified(guild.idLong)
-            guild.owner.user.openPrivateChannel().queue { it.sendMessage(Application.messageNotify).queue() }
+            guild.owner.user.openPrivateChannel().queue { it.sendMessage(Application.messageDm).queue() }
         }
     }
 

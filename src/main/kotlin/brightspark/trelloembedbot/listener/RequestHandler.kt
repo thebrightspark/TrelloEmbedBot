@@ -90,7 +90,7 @@ class RequestHandler : InitializingBean {
             log.warn("Token not set for guild ID ${guild.idLong} - not getting info")
             if (!pair.second) {
                 tokenHandler.setNotified(guild.idLong)
-                guild.owner.user.openPrivateChannel().queue { it.sendMessage(Application.messageNotify).queue() }
+                guild.owner.user.openPrivateChannel().queue { it.sendMessage(Application.messageDm).queue() }
             }
             return null
         }
