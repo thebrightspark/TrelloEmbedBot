@@ -1,5 +1,6 @@
 package brightspark.trelloembedbot.listener
 
+import brightspark.trelloembedbot.Utils
 import brightspark.trelloembedbot.tokens.TrelloTokenHandler
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.ObjectMapper
@@ -69,16 +70,21 @@ class RequestHandler : InitializingBean {
         log.info("HTTP Get: $request")
         val response = rest.getForEntity<String>(request)
         val status = response.statusCode
-        val json: JsonNode
-        //TODO: Send message back to channel on failure?
+        log.info("Response status: $status")
+        var json: JsonNode? = null
         try {
             json = jsonMapper.readTree(response.body)
         } catch (e: IOException) {
-            log.error("Exception parsing JSON from URL: $request", e)
-            return null
+            log.error("Exception parsing response body from URL as JSON\nResponse body: ${response.body}\n\n${e.message}")
         }
         if (status.isError) {
-            log.error("Error getting from URL: $request\nCode: ${status.value()}\nError: ${json.get("error")}\nMessage: ${json.get("message")}")
+            val errorMessage =
+                    if (json == null)
+                        "Error: ${response.body}"
+                    else
+                        "Error: ${json.get("error")}\nMessage: ${json.get("message")}"
+            log.error("Error getting from URL: $request\nCode: ${status.value()}\n$errorMessage")
+            Utils.sendMessage(channel, "Request to Trello API failed:\n$errorMessage", success = false)
             return null
         }
         return json
