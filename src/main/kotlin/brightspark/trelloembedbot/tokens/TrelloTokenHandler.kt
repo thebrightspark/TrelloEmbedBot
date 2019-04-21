@@ -15,8 +15,11 @@ class TrelloTokenHandler : InitializingBean {
     private val dbUrl = "jdbc:sqlite:" + File("db").absolutePath
     private var dbConnection: Connection? = null
 
-    override fun afterPropertiesSet() =
+    override fun afterPropertiesSet() {
         execute("create table if not exists tokens (guild_id integer primary key not null, trello_token text, token_owner integer, notified integer default 0 not null)")
+        //TODO: Add table for user_tokens
+        //execute("create table if not exists user_tokens (user_id integer primary key not null, trello_token text, notified integer default 0 not null)")
+    }
 
     private fun getConnection() : Connection {
         try {
@@ -54,18 +57,33 @@ class TrelloTokenHandler : InitializingBean {
             executeWithResult("select trello_token, token_owner from tokens where guild_id = $guildId") {
                 val token = it.getString("trello_token")
                 val owner = it.getLong("token_owner")
-                if (token != null && owner > 0) Pair(token, owner) else null
+                if (token != null && owner > 0) token to owner else null
             }
+
+    fun getUserToken(userId: Long): String? =
+            executeWithResult("select trello_token from user_tokens where user_id = $userId") { it.getString("trello_token") }
 
     fun setToken(guildId: Long, trelloToken: String, userId: Long) =
             execute("replace into tokens (guild_id,trello_token,token_owner,notified) values ($guildId,'$trelloToken',$userId,false)")
 
+    fun setUserToken(userId: Long, trelloToken: String) =
+            execute("replace into user_tokens (user_id,trello_token,notified) values ($userId,'$trelloToken',false)")
+
     fun removeToken(guildId: Long) = execute("delete from tokens where guild_id = $guildId")
+
+    fun removeUserToken(userId: Long) = execute("delete from user_tokens where user_id = $userId")
 
     fun getTokenAndNotified(guildId: Long): Pair<String?, Boolean> =
             executeWithResult("select trello_token, notified from tokens where guild_id = $guildId") {
-                Pair(it.getString("trello_token"), it.getBoolean("notified"))
-            } ?: Pair("", false)
+                it.getString("trello_token") to it.getBoolean("notified")
+            } ?: "" to false
+
+    fun getUserTokenAndNotified(userId: Long): Pair<String?, Boolean> =
+        executeWithResult("select trello_token, notified from tokens where user_id = $userId") {
+            it.getString("trello_token") to it.getBoolean("notified")
+        } ?: "" to false
 
     fun setNotified(guildId: Long) = execute("replace into tokens (guild_id,notified) values ($guildId,true)")
+
+    fun setUserNotified(userId: Long) = execute("replace into user_tokens (user_id,notified) values ($userId,true)")
 }

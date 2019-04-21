@@ -81,6 +81,12 @@ class Listener : DisposableBean {
         }
     }
 
+    //TODO: Handle friend requests for DM activity messages
+    /*@SubscribeEvent
+    fun onFriendRequest(event: FriendRequestReceivedEvent) {
+        event.friendRequest.accept().queue()
+    }*/
+
     private fun handleBoard(boardId: String, channel: TextChannel) {
         val boardInfo = requestHandler.getBoardInfo(boardId, channel)
         if (boardInfo == null) {
@@ -152,7 +158,7 @@ class Listener : DisposableBean {
                 log.warn("Unknown colour '$labelColour', using colour NULL instead")
                 colour = LabelColour.NULL
             }
-            Pair(it.get("name").asText(), colour)
+            it.get("name").asText() to colour
         }
         var messageColour = LabelColour.NULL.colour
         if (labels.isNotEmpty()) {

@@ -39,7 +39,7 @@ class CommandToken {
         if (parts.size == 1 && parts[0].equals("token", true)) {
             // Open a private session with the user to manage the token
             val user = member.user
-            privateConvos[user.idLong] = Pair(event.guild.idLong, System.currentTimeMillis() + dmTimeout)
+            privateConvos[user.idLong] = event.guild.idLong to System.currentTimeMillis() + dmTimeout
             user.openPrivateChannel().queue { it.sendMessage(Utils.getDmMessage(event.guild)).queue() }
         }
     }

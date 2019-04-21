@@ -19,7 +19,7 @@ class TrelloApiUrlBuilder {
     }
 
     fun addParam(key: String, value: String) : TrelloApiUrlBuilder {
-        params.add(Pair(key, value))
+        params.add(key to value)
         return this
     }
 
