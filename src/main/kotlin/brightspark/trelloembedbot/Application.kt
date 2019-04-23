@@ -39,8 +39,7 @@ class Application {
 			.addEventListener(listener, commandToken)
 		try {
 			builder.build()
-		}
-		catch (e: LoginException) {
+		} catch (e: LoginException) {
 			log.error("Token '$token' is invalid!")
 			exitProcess(0)
 		}
