@@ -58,6 +58,8 @@ class RequestHandler : InitializingBean {
 			.addParam("list", "true")
 			.addParam("list_fields", "name")
 			.addParam("label_fields", "name,color")
+			.addParam("attachments", "cover")
+			.addParam("attachment_fields", "url")
 			.build()
 	}
 

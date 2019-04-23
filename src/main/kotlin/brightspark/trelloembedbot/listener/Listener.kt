@@ -183,6 +183,10 @@ class Listener : DisposableBean {
 			return@extractFromJsonArray Triple(list.get("name").asText(), list.get("pos").asInt(), items)
 		}
 
+		// Cover image attachment
+		val attachments = cardInfo.get("attachments").elements()
+		val coverImageUrl = if (attachments.hasNext()) attachments.next().get("url").asText() else ""
+
 		// Create embed message
 		val embedBuilder = EmbedBuilder()
 			.setTitle(cardInfo.get("name").asText())
@@ -198,6 +202,9 @@ class Listener : DisposableBean {
 				embedBuilder.addField(list.first, listSb.toString(), true)
 			}
 		}
+
+		if (coverImageUrl.isNotBlank())
+			embedBuilder.setImage(coverImageUrl)
 
 		channel.sendMessage(embedBuilder.build()).queue()
 	}
